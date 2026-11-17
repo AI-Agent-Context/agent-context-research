@@ -1,0 +1,25 @@
+{
+    "name":  "@ai-agent-context/agent-context-research",
+    "version":  "0.1.0",
+    "description":  "Install the academic research context and research skills into the current project.",
+    "type":  "module",
+    "bin":  {
+                "agent-context-research":  "./bin/install.mjs"
+            },
+    "files":  [
+                  "bin",
+                  "RESEARCH_CONTEXT.md",
+                  "skills",
+                  "README.md"
+              ],
+    "engines":  {
+                    "node":  "^18.17.0 || \u003e=20.5.0"
+                },
+    "repository":  {
+                       "type":  "git",
+                       "url":  "https://github.com/AI-Agent-Context/agent-context-research.git"
+                   },
+    "publishConfig":  {
+                          "access":  "public"
+                      }
+}
