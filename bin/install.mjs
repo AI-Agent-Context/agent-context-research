@@ -42,15 +42,21 @@ function walkFiles(directory, relative = '') {
   return files;
 }
 
-function getContextFile() {
+function getContextFiles() {
   const found = contextNames.filter(name => {
     const stat = lstatOrNull(path.join(packageRoot, name));
     if (!stat) return false;
     if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('Context source must be a regular file: ' + name);
     return true;
   });
-  if (found.length !== 1) throw new Error('Package must contain exactly one domain context Markdown file.');
-  return found[0];
+  const globalContext = 'GLOBAL_WORKING_CONTEXT.md';
+  const domainContexts = found.filter(name => name !== globalContext);
+  const isCorePackage = found.length === 1 && found[0] === globalContext;
+  const isStandaloneDomainPackage = found.length === 2 && found.includes(globalContext) && domainContexts.length === 1;
+  if (!isCorePackage && !isStandaloneDomainPackage) {
+    throw new Error('Package must contain GLOBAL_WORKING_CONTEXT.md and either only that file or exactly one domain context.');
+  }
+  return found;
 }
 
 function getSkills() {
@@ -107,16 +113,29 @@ function main() {
   }
 
   const cwd = process.cwd();
-  const contextFile = getContextFile();
-  const contextSource = path.join(packageRoot, contextFile);
-  regularFile(contextSource);
+  const contextFiles = getContextFiles();
+  for (const contextFile of contextFiles) regularFile(path.join(packageRoot, contextFile));
   const skills = getSkills();
   const skillsDestinationRoot = path.resolve(cwd, ...(target === 'codex' ? ['.agents', 'skills'] : ['skills']));
   ensureSafeDirectoryPath(skillsDestinationRoot, cwd);
 
-  const contextDestination = path.join(cwd, contextFile);
-  if (lstatOrNull(contextDestination)) {
-    throw new Error('Destination already exists; will not overwrite: ' + contextDestination);
+  const plan = [];
+  for (const contextFile of contextFiles) {
+    const contextSource = path.join(packageRoot, contextFile);
+    const contextDestination = path.join(cwd, contextFile);
+    const existing = lstatOrNull(contextDestination);
+    if (existing) {
+      const isIdenticalGlobalContext = contextFile === 'GLOBAL_WORKING_CONTEXT.md'
+        && !existing.isSymbolicLink()
+        && existing.isFile()
+        && fs.readFileSync(contextSource).equals(fs.readFileSync(contextDestination));
+      if (isIdenticalGlobalContext) {
+        console.log('Reusing identical existing Global Working Context: ' + contextDestination);
+        continue;
+      }
+      throw new Error('Destination already exists; will not overwrite: ' + contextDestination);
+    }
+    plan.push({ source: contextSource, destination: contextDestination, label: contextFile });
   }
 
   for (const skill of skills) {
@@ -126,7 +145,6 @@ function main() {
     }
   }
 
-  const plan = [{ source: contextSource, destination: contextDestination, label: contextFile }];
   for (const skill of skills) {
     for (const file of skill.files) {
       const destination = path.resolve(skillsDestinationRoot, skill.name, file.relative);
@@ -138,7 +156,7 @@ function main() {
     }
   }
 
-  console.log('Installing ' + contextFile + ' and ' + skills.length + ' skill(s):');
+  console.log('Installing ' + contextFiles.join(', ') + ' and ' + skills.length + ' skill(s):');
   for (const item of plan) console.log('  ' + item.label + ' -> ' + item.destination);
 
   const installed = [];

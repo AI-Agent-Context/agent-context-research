@@ -42,10 +42,10 @@ Verify that the required `pymupdf` library is present:
 
 ### Phase 4 — Execution & Image Extraction
 
-Run the pre-bundled extraction script located at `research/skills/convert-paper-pdf/scripts/pdf_to_md.py`:
+The default `--target codex` install places the bundled script at `.agents/skills/convert-paper-pdf/scripts/pdf_to_md.py`. With `--target portable`, use `skills/convert-paper-pdf/scripts/pdf_to_md.py`:
 
 ```bash
-python research/skills/convert-paper-pdf/scripts/pdf_to_md.py <path_to_pdf> --output-dir papers --assets-dir assets/images
+python .agents/skills/convert-paper-pdf/scripts/pdf_to_md.py <path_to_pdf> --output-dir papers --assets-dir assets/images
 ```
 
 The script will:

@@ -1,7 +1,9 @@
 # Agent Context Research
 
-Install the Research context and all included skills into the current project.
+Install the universal context, Research context, and all included skills into the current project. This package works by itself; the Core package is optional.
 
-Command: npx @ai-agent-context/agent-context-research --target codex
+Command: `npx @ai-agent-context/agent-context-research --target codex`
 
-Use --target portable to install skills under skills/ instead of .agents/skills. The installer copies complete skill directories, including the PDF conversion script, and refuses to overwrite existing context or skill directories.
+The package includes `GLOBAL_WORKING_CONTEXT.md`, `RESEARCH_CONTEXT.md`, and all Research skills. If an identical Global context already exists, the installer reuses it; a different existing context is left untouched and causes an error.
+
+Use `--target portable` to install skills under `skills/` instead of `.agents/skills`. The installer copies complete skill directories and supporting files.
