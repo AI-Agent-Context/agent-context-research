@@ -1,7 +1,7 @@
 {
   "name": "@ai-agent-context/agent-context-research",
   "version": "0.2.0",
-  "description": "Install always-on Core instructions plus academic research context and skills.",
+  "description": "Install shared Core context plus academic research context and skills.",
   "type": "module",
   "bin": {
     "agent-context-research": "./bin/install.mjs"
