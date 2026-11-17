@@ -1,11 +1,19 @@
 # Agent Context Research
 
-Install the Research context and skills. npm also installs Core as a dependency, so Global Working Context stays sourced from the Core package.
+Install the Core working rules as always-on user instructions, then install this domain context and its skills in the current project. Core is installed from its npm dependency and remains the single source for global rules.
 
-Command: `npx @ai-agent-context/agent-context-research --target codex`
+Default installation for Codex:
 
-This command installs GLOBAL_WORKING_CONTEXT.md from Core, RESEARCH_CONTEXT.md, and all Research skills. If an identical Global context already exists, it is reused; a different existing file is left untouched and causes an error.
+    npx @ai-agent-context/agent-context-research --target codex
 
-Running `npx @ai-agent-context/agent-context-core` by itself installs only Global Working Context.
+This installs the Core managed block into ~/.codex/AGENTS.md, RESEARCH_CONTEXT.md in the current project, and skills under .agents/skills. Re-running updates only the Core managed block and preserves other user instructions. Existing project context and skill files are never overwritten.
 
-Use `--target portable` to install skills under `skills/` instead of `.agents/skills`. The installer copies complete skill directories and supporting files.
+Choose a different agent for Core instructions:
+
+    npx @ai-agent-context/agent-context-research --agent claude-code --target portable
+    npx @ai-agent-context/agent-context-research --agent copilot-cli --target portable
+    npx @ai-agent-context/agent-context-research --agent gemini-cli --target portable
+
+The --agent option selects the always-on Core instructions destination. The --target option selects the skill destination: codex installs under .agents/skills; portable installs under skills/ for manual discovery. Domain context remains in the current project for the agent to load when that domain applies.
+
+Installing @ai-agent-context/agent-context-core by itself configures only the shared Core rules and installs no domain context or skills.

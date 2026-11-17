@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { getGlobalInstructionDestination, installGlobalContext, supportedAgents } from '@ai-agent-context/agent-context-core/installer';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const npmRequire = createRequire(import.meta.url);
-const contextNames = ['RESEARCH_CONTEXT.md'];
+const domainContextName = 'RESEARCH_CONTEXT.md';
 
 function lstatOrNull(file) {
   try {
@@ -45,26 +46,20 @@ function walkFiles(directory, relative = '') {
 }
 
 function getContextFiles() {
-  const found = contextNames.filter(name => {
-    const stat = lstatOrNull(path.join(packageRoot, name));
-    if (!stat) return false;
-    if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('Context source must be a regular file: ' + name);
-    return true;
-  });
-  if (found.length !== 1) throw new Error('Package must contain exactly one domain context Markdown file.');
+  const source = path.join(packageRoot, domainContextName);
+  regularFile(source);
+  return [{ name: domainContextName, source }];
+}
 
-  const domainContext = found[0];
-  const files = [{ name: domainContext, source: path.join(packageRoot, domainContext) }];
-  let globalContextSource;
+function getGlobalContextSource() {
+  let source;
   try {
-    globalContextSource = npmRequire.resolve('@ai-agent-context/agent-context-core/GLOBAL_WORKING_CONTEXT.md');
+    source = npmRequire.resolve('@ai-agent-context/agent-context-core/GLOBAL_WORKING_CONTEXT.md');
   } catch {
-    throw new Error('Required dependency @ai-agent-context/agent-context-core is unavailable. Install this package with npm so Core is installed automatically.');
+    throw new Error('Required dependency @ai-agent-context/agent-context-core is unavailable. Install this package with Core 0.2.0 or newer.');
   }
-  regularFile(globalContextSource);
-  files.unshift({ name: 'GLOBAL_WORKING_CONTEXT.md', source: globalContextSource });
-  for (const file of files) regularFile(file.source);
-  return files;
+  regularFile(source);
+  return source;
 }
 
 function getSkills() {
@@ -102,48 +97,56 @@ function ensureSafeDirectoryPath(directory, cwd) {
   }
 }
 
-function main() {
-  const args = process.argv.slice(2);
+function parseArguments(args) {
+  let agent = 'codex';
+  let target = 'codex';
+  const seen = new Set();
+  if (args.length % 2 !== 0) throw new Error('Each option requires a value.');
+  for (let index = 0; index < args.length; index += 2) {
+    const option = args[index];
+    const value = args[index + 1];
+    if (!['--agent', '--target'].includes(option) || seen.has(option) || !value || value.startsWith('-')) {
+      throw new Error('Invalid or repeated option, or missing value near "' + option + '".');
+    }
+    seen.add(option);
+    if (option === '--agent') {
+      if (!supportedAgents.includes(value)) {
+        throw new Error('Unsupported agent "' + value + '". Choose one of: ' + supportedAgents.join(', ') + '.');
+      }
+      agent = value;
+    } else {
+      if (!['codex', 'portable'].includes(value)) {
+        throw new Error('Use --target codex or --target portable for skills.');
+      }
+      target = value;
+    }
+  }
+  return { agent, target };
+}
+
+function main(args = process.argv.slice(2)) {
   if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
-    console.log('Usage: <package-command> [--target codex|portable]');
-    console.log('Installs this package context and all included skills into the current project.');
-    console.log('The default target is codex (.agents/skills).');
+    console.log('Usage: <package-command> [--agent codex|claude-code|copilot-cli|gemini-cli] [--target codex|portable]');
+    console.log('Installs Core as always-on user instructions and this domain context plus skills in the current project.');
+    console.log('The default agent is Codex. --target controls the skill directory only.');
     return 0;
   }
 
-  let target = 'codex';
-  if (args.length > 0) {
-    if (args.length !== 2 || args[0] !== '--target' || !['codex', 'portable'].includes(args[1])) {
-      console.error('Error: use --target codex or --target portable.');
-      return 1;
-    }
-    target = args[1];
-  }
-
+  const { agent, target } = parseArguments(args);
   const cwd = process.cwd();
   const contextFiles = getContextFiles();
+  const globalContextSource = getGlobalContextSource();
   const skills = getSkills();
   const skillsDestinationRoot = path.resolve(cwd, ...(target === 'codex' ? ['.agents', 'skills'] : ['skills']));
   ensureSafeDirectoryPath(skillsDestinationRoot, cwd);
 
   const plan = [];
   for (const context of contextFiles) {
-    const contextFile = context.name;
-    const contextSource = context.source;
-    const contextDestination = path.join(cwd, contextFile);
-    const existing = lstatOrNull(contextDestination);
-    if (existing) {
-      const isIdenticalGlobalContext = contextFile === 'GLOBAL_WORKING_CONTEXT.md'
-        && !existing.isSymbolicLink()
-        && existing.isFile()
-        && fs.readFileSync(contextSource).equals(fs.readFileSync(contextDestination));
-      if (isIdenticalGlobalContext) {
-        console.log('Reusing identical existing Global Working Context: ' + contextDestination);
-        continue;
-      }
-      throw new Error('Destination already exists; will not overwrite: ' + contextDestination);
+    const destination = path.join(cwd, context.name);
+    if (lstatOrNull(destination)) {
+      throw new Error('Destination already exists; will not overwrite: ' + destination);
     }
-    plan.push({ source: contextSource, destination: contextDestination, label: contextFile });
+    plan.push({ source: context.source, destination, label: context.name });
   }
 
   for (const skill of skills) {
@@ -164,11 +167,15 @@ function main() {
     }
   }
 
-  console.log('Installing ' + contextFiles.map(context => context.name).join(', ') + ' and ' + skills.length + ' skill(s):');
+  const globalDestination = getGlobalInstructionDestination(agent);
+  console.log('Installing Core Global Working Context for ' + agent + ', ' + contextFiles.map(context => context.name).join(', ') + ', and ' + skills.length + ' skill(s):');
+  console.log('  GLOBAL_WORKING_CONTEXT.md -> ' + globalDestination);
   for (const item of plan) console.log('  ' + item.label + ' -> ' + item.destination);
 
   const installed = [];
   try {
+    const globalResult = installGlobalContext({ agent, source: globalContextSource });
+    if (globalResult.changed) installed.push(globalResult.destination);
     for (const item of plan) {
       fs.mkdirSync(path.dirname(item.destination), { recursive: true });
       fs.copyFileSync(item.source, item.destination, fs.constants.COPYFILE_EXCL);
@@ -184,10 +191,12 @@ function main() {
   return 0;
 }
 
-try {
-  process.exitCode = main();
-} catch (error) {
-  console.error('Error: ' + error.message);
-  console.error('No package files were installed.');
-  process.exitCode = 1;
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  try {
+    process.exitCode = main();
+  } catch (error) {
+    console.error('Error: ' + error.message);
+    console.error('No package files were installed.');
+    process.exitCode = 1;
+  }
 }
