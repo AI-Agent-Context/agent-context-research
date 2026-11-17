@@ -8,7 +8,6 @@
   },
   "files": [
     "bin",
-    "GLOBAL_WORKING_CONTEXT.md",
     "RESEARCH_CONTEXT.md",
     "skills",
     "README.md"
@@ -22,5 +21,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@ai-agent-context/agent-context-core": ">=0.1.0"
   }
 }

@@ -3,9 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const contextNames = ['GLOBAL_WORKING_CONTEXT.md', 'CODING_CONTEXT.md', 'RESEARCH_CONTEXT.md'];
+const npmRequire = createRequire(import.meta.url);
+const contextNames = ['RESEARCH_CONTEXT.md'];
 
 function lstatOrNull(file) {
   try {
@@ -49,14 +51,20 @@ function getContextFiles() {
     if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('Context source must be a regular file: ' + name);
     return true;
   });
-  const globalContext = 'GLOBAL_WORKING_CONTEXT.md';
-  const domainContexts = found.filter(name => name !== globalContext);
-  const isCorePackage = found.length === 1 && found[0] === globalContext;
-  const isStandaloneDomainPackage = found.length === 2 && found.includes(globalContext) && domainContexts.length === 1;
-  if (!isCorePackage && !isStandaloneDomainPackage) {
-    throw new Error('Package must contain GLOBAL_WORKING_CONTEXT.md and either only that file or exactly one domain context.');
+  if (found.length !== 1) throw new Error('Package must contain exactly one domain context Markdown file.');
+
+  const domainContext = found[0];
+  const files = [{ name: domainContext, source: path.join(packageRoot, domainContext) }];
+  let globalContextSource;
+  try {
+    globalContextSource = npmRequire.resolve('@ai-agent-context/agent-context-core/GLOBAL_WORKING_CONTEXT.md');
+  } catch {
+    throw new Error('Required dependency @ai-agent-context/agent-context-core is unavailable. Install this package with npm so Core is installed automatically.');
   }
-  return found;
+  regularFile(globalContextSource);
+  files.unshift({ name: 'GLOBAL_WORKING_CONTEXT.md', source: globalContextSource });
+  for (const file of files) regularFile(file.source);
+  return files;
 }
 
 function getSkills() {
@@ -114,14 +122,14 @@ function main() {
 
   const cwd = process.cwd();
   const contextFiles = getContextFiles();
-  for (const contextFile of contextFiles) regularFile(path.join(packageRoot, contextFile));
   const skills = getSkills();
   const skillsDestinationRoot = path.resolve(cwd, ...(target === 'codex' ? ['.agents', 'skills'] : ['skills']));
   ensureSafeDirectoryPath(skillsDestinationRoot, cwd);
 
   const plan = [];
-  for (const contextFile of contextFiles) {
-    const contextSource = path.join(packageRoot, contextFile);
+  for (const context of contextFiles) {
+    const contextFile = context.name;
+    const contextSource = context.source;
     const contextDestination = path.join(cwd, contextFile);
     const existing = lstatOrNull(contextDestination);
     if (existing) {
@@ -156,7 +164,7 @@ function main() {
     }
   }
 
-  console.log('Installing ' + contextFiles.join(', ') + ' and ' + skills.length + ' skill(s):');
+  console.log('Installing ' + contextFiles.map(context => context.name).join(', ') + ' and ' + skills.length + ' skill(s):');
   for (const item of plan) console.log('  ' + item.label + ' -> ' + item.destination);
 
   const installed = [];
